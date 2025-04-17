@@ -104,20 +104,40 @@ def get_single_product(request, id):
     except Product.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
+from django.core.paginator import Paginator, EmptyPage
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+
 @api_view(['GET'])
 def get_products_by_category(request, category_name):
-    limit = int(request.GET.get('limit', 10))
-    skip = int(request.GET.get('skip', 0))
-    
     try:
-        category = Category.objects.get(slug=category_name)
-        products = Product.objects.filter(category=category)
+        # Validate and parse query parameters
+        try:
+            limit = max(1, min(int(request.GET.get('limit', 10)), 100))  # Clamp between 1-100
+            skip = max(0, int(request.GET.get('skip', 0)))  # Ensure non-negative
+        except ValueError:
+            return Response(
+                {"error": "Invalid pagination parameters"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get category by slug (more URL-friendly than name)
+        category = Category.objects.get(slug__iexact=category_name)
+        
+        # Optimized query - only get what we need
+        products = Product.objects.filter(category=category).select_related('category')
         total = products.count()
         
-        paginator = Paginator(products, limit)
-        page = paginator.page((skip // limit) + 1)
-        products_page = page.object_list
-        
+        # Handle pagination more robustly
+        try:
+            paginator = Paginator(products, limit)
+            page_number = (skip // limit) + 1
+            products_page = paginator.page(page_number).object_list
+        except EmptyPage:
+            products_page = []
+
+        # Serialize with product images
         serializer = ProductsResponseSerializer({
             'limit': limit,
             'skip': skip,
@@ -126,9 +146,18 @@ def get_products_by_category(request, category_name):
         })
         
         return Response(serializer.data)
+    
     except Category.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
-
+        return Response(
+            {"error": f"Category '{category_name}' not found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {"error": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    
 @api_view(['POST'])
 @csrf_exempt
 def upload_product_image(request):

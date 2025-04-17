@@ -1,7 +1,7 @@
 import requests
 
 # Your Django backend URL
-BASE_URL = "http://127.0.0.1:8000/products/"
+BASE_URL = "http://192.168.0.117:8000/products/"
 
 # Fetch categories from dummyjson
 CATEGORY_URL = "https://dummyjson.com/products/categories"
@@ -40,7 +40,7 @@ def post_product(product):
         "discount_percentage": product["discountPercentage"],
         "rating": product["rating"],
         "stock": product["stock"],
-        "thumbnail": product["thumbnail"]
+        "thumbnail": product["thumbnail"],
     }
     response = requests.post(BASE_URL, json=data)
     if response.status_code in [200, 201]:
